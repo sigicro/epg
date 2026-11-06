@@ -1,0 +1,61 @@
+name: Osvježi TV vodič
+
+on:
+  schedule:
+    - cron: "30 3 * * *"   # svaki dan u 03:30 UTC
+  workflow_dispatch:        # ručno pokretanje iz kartice Actions
+
+permissions:
+  contents: write
+
+concurrency:
+  group: epg
+  cancel-in-progress: false
+
+jobs:
+  grab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Preuzmi ovaj repozitorij
+        uses: actions/checkout@v4
+
+      - name: Preuzmi alat iptv-org/epg
+        uses: actions/checkout@v4
+        with:
+          repository: iptv-org/epg
+          ref: master
+          path: epg-tool
+
+      - name: Postavi Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instaliraj alat
+        working-directory: epg-tool
+        run: npm install
+
+      - name: Skupi program
+        working-directory: epg-tool
+        run: >
+          npm run grab ---
+          --channels=../channels.xml
+          --output=../guide.xml
+          --gzip=../guide.xml.gz
+          --days=3
+          --maxConnections=8
+          --timeout=30000
+
+      - name: Spremi vodič u repozitorij
+        run: |
+          rm -f guide.xml
+          git config user.name "epg-bot"
+          git config user.email "epg-bot@users.noreply.github.com"
+          git add guide.xml.gz
+          if git diff --cached --quiet; then
+            echo "Nema promjena."
+          else
+            git commit -m "TV vodič $(date -u +%Y-%m-%d)"
+            git push
+          fi
